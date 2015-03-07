@@ -1,5 +1,6 @@
 # TODO: listPosts
 # TODO: return subscriptions
+# TODO: check for extra *_data = data after query
 
 from ext import mysql
 from flask import request, jsonify, Blueprint
@@ -25,6 +26,7 @@ def user_create():
     new_user_about = conn.escape_string(req_json['about'])
     new_user_name = conn.escape_string(req_json['name'])
     new_user_email = conn.escape_string(req_json['email'])
+    # TODO: check isAnon param
     new_user_is_anon = bool(req_json.get('isAnonymous', False))
 
     cursor.execute("SELECT 1 FROM User WHERE email='" + new_user_email + "' OR username='" + new_user_username + "'")
