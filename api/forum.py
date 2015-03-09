@@ -1,6 +1,6 @@
 # TODO: listPosts, listThreads, listUsers
 
-from ext import mysql, user_details
+from ext import mysql, user_details, user_exists
 from flask import request, jsonify, Blueprint
 from werkzeug.exceptions import BadRequest
 
@@ -8,7 +8,7 @@ forum_api = Blueprint('forum_api', __name__)
 
 
 @forum_api.route('/create', methods=['POST'])
-def forum_reate():
+def forum_create():
     try:
         req_json = request.get_json()
     except BadRequest:
@@ -24,10 +24,7 @@ def forum_reate():
     new_forum_short_name = conn.escape_string(req_json['short_name'])
     new_forum_user = conn.escape_string(req_json['user'])
 
-    cursor.execute("SELECT 1 FROM User WHERE email='" + new_forum_user + "'")
-    data = cursor.fetchone()
-
-    if data is None:
+    if not user_exists(cursor, new_forum_user):
         return jsonify(code=1, response="No user with such email!")
 
     cursor.execute("SELECT id, user FROM Forum WHERE name='" + new_forum_name +
@@ -50,7 +47,7 @@ def forum_reate():
 
     cursor.execute("SELECT id FROM Forum WHERE short_name='" + new_forum_short_name + "'")
 
-    data = cursor.fetchone()  # got tuple
+    data = cursor.fetchone()
 
     resp = {
         "id": data[0],
@@ -82,7 +79,7 @@ def forum_details():
     if 'related' in req_params:
         if req_params['related'] != 'user':
             return jsonify(code=3, response="Wrong parameters")
-        user_info = user_details(data[3])
+        user_info = user_details(cursor, data[3])
     else:
         user_info = data[3]
 

@@ -1,8 +1,8 @@
 # TODO: listPosts
 # TODO: return subscriptions
-# TODO: check for extra *_data = data after query
+# TODO: listFollowers and listFollowing change output ([user, ...])
 
-from ext import mysql
+from ext import mysql, get_followers, user_exists
 from flask import request, jsonify, Blueprint
 from werkzeug.exceptions import BadRequest
 
@@ -26,13 +26,16 @@ def user_create():
     new_user_about = conn.escape_string(req_json['about'])
     new_user_name = conn.escape_string(req_json['name'])
     new_user_email = conn.escape_string(req_json['email'])
-    # TODO: check isAnon param
-    new_user_is_anon = bool(req_json.get('isAnonymous', False))
 
-    cursor.execute("SELECT 1 FROM User WHERE email='" + new_user_email + "' OR username='" + new_user_username + "'")
-    data = cursor.fetchone()
-    if data is not None:
-        return jsonify(code=5, response="User with such email or username already exists!")
+    if 'isAnonymous' in req_json:
+        if req_json['isAnonymous'] is not False and req_json['isAnonymous'] is not True:
+            return jsonify(code=3, response="Wrong parameters")
+        new_user_is_anon = req_json['isAnonymous']
+    else:
+        new_user_is_anon = False
+
+    if user_exists(cursor, new_user_email):
+        return jsonify(code=5, response="User with such email already exists!")
 
     cursor.execute("INSERT INTO User VALUES (null,'" + new_user_about + "','" + new_user_email + "','" +
                    str(new_user_is_anon) + "','" + new_user_name + "','" + new_user_username + "')")
@@ -70,28 +73,12 @@ def user_details():
     user_email = conn.escape_string(req_params['user'])
 
     cursor.execute("SELECT * FROM User WHERE email='" + user_email + "'")
-    data = cursor.fetchone()
+    user_data = cursor.fetchone()
 
-    if data is None:
+    if user_data is None:
         return jsonify(code=1, response="No user with such email!")
 
-    user_data = data
-
-    cursor.execute("SELECT follower_email FROM Followers WHERE followee_email='" + user_email + "'")
-    data = cursor.fetchall()
-
-    # if data is not None:
-    followers_list = []
-    for t in data:
-        followers_list.append(t[0])
-
-    cursor.execute("SELECT followee_email FROM Followers WHERE follower_email='" + user_email + "'")
-    data = cursor.fetchall()
-
-    # if data is not None:
-    following_list = []
-    for t in data:
-        following_list.append(t[0])
+    follow_info = get_followers(cursor, user_email)
 
     resp = {
         "id": user_data[0],
@@ -100,8 +87,8 @@ def user_details():
         "isAnonymous": bool(user_data[3]),
         "name": user_data[4],
         "username": user_data[5],
-        "followers": followers_list,
-        "following": following_list
+        "followers": follow_info['followers'],
+        "following": follow_info['following']
     }
     return jsonify(code=0, response=resp)
 
@@ -123,37 +110,18 @@ def user_follow():
     followee_email = conn.escape_string(req_json['followee'])
 
     cursor.execute("SELECT * FROM User WHERE email='" + follower_email + "'")
-    data = cursor.fetchone()
+    follower_data = cursor.fetchone()
 
-    if data is None:
+    if follower_data is None:
         return jsonify(code=1, response="No user with such email!")
 
-    follower_data = data
-
-    cursor.execute("SELECT 1 FROM User WHERE email='" + followee_email + "'")
-    data = cursor.fetchone()
-
-    if data is None:
+    if not user_exists(cursor, followee_email):
         return jsonify(code=1, response="No user with such email!")
 
     cursor.execute("INSERT IGNORE INTO Followers VALUES ('" + follower_email + "','" + followee_email + "')")
     conn.commit()
 
-    cursor.execute("SELECT follower_email FROM Followers WHERE followee_email='" + follower_email + "'")
-    data = cursor.fetchall()
-
-    # if data is not None:
-    followers_list = []
-    for t in data:
-        followers_list.append(t[0])
-
-    cursor.execute("SELECT followee_email FROM Followers WHERE follower_email='" + follower_email + "'")
-    data = cursor.fetchall()
-
-    # if data is not None:
-    following_list = []
-    for t in data:
-        following_list.append(t[0])
+    follow_info = get_followers(cursor, follower_email)
 
     resp = {
         "id": follower_data[0],
@@ -162,8 +130,8 @@ def user_follow():
         "isAnonymous": bool(follower_data[3]),
         "name": follower_data[4],
         "username": follower_data[5],
-        "followers": followers_list,
-        "following": following_list
+        "followers": follow_info['followers'],
+        "following": follow_info['following']
     }
 
     return jsonify(code=0, response=resp)
@@ -182,12 +150,10 @@ def user_list_followers():
     user_email = conn.escape_string(req_params['user'])
 
     cursor.execute("SELECT * FROM User WHERE email='" + user_email + "'")
-    data = cursor.fetchone()
+    user_data = cursor.fetchone()
 
-    if data is None:
+    if user_data is None:
         return jsonify(code=1, response="No user with such email!")
-
-    user_data = data
 
     since_id = req_params.get('since_id')
     if since_id is not None:
@@ -259,12 +225,10 @@ def user_list_following():
     user_email = conn.escape_string(req_params['user'])
 
     cursor.execute("SELECT * FROM User WHERE email='" + user_email + "'")
-    data = cursor.fetchone()
+    user_data = cursor.fetchone()
 
-    if data is None:
+    if user_data is None:
         return jsonify(code=1, response="No user with such email!")
-
-    user_data = data
 
     cursor.execute("SELECT follower_email FROM Followers WHERE followee_email='" + user_email + "'")
     data = cursor.fetchall()
@@ -340,38 +304,19 @@ def user_unfollow():
     followee_email = conn.escape_string(req_json['followee'])
 
     cursor.execute("SELECT * FROM User WHERE email='" + follower_email + "'")
-    data = cursor.fetchone()
+    follower_data = cursor.fetchone()
 
-    if data is None:
+    if follower_data is None:
         return jsonify(code=1, response="No user with such email!")
 
-    follower_data = data
-
-    cursor.execute("SELECT 1 FROM User WHERE email='" + followee_email + "'")
-    data = cursor.fetchone()
-
-    if data is None:
+    if not user_exists(cursor, followee_email):
         return jsonify(code=1, response="No user with such email!")
 
     cursor.execute("DELETE FROM Followers WHERE follower_email='" + follower_email +
                    "' AND followee_email='" + followee_email + "'")
     conn.commit()
 
-    cursor.execute("SELECT follower_email FROM Followers WHERE followee_email='" + follower_email + "'")
-    data = cursor.fetchall()
-
-    # if data is not None:
-    followers_list = []
-    for t in data:
-        followers_list.append(t[0])
-
-    cursor.execute("SELECT followee_email FROM Followers WHERE follower_email='" + follower_email + "'")
-    data = cursor.fetchall()
-
-    # if data is not None:
-    following_list = []
-    for t in data:
-        following_list.append(t[0])
+    follow_info = get_followers(cursor, follower_email)
 
     resp = {
         "id": follower_data[0],
@@ -380,8 +325,8 @@ def user_unfollow():
         "isAnonymous": bool(follower_data[3]),
         "name": follower_data[4],
         "username": follower_data[5],
-        "followers": followers_list,
-        "following": following_list
+        "followers": follow_info['followers'],
+        "following": follow_info['following']
     }
 
     return jsonify(code=0, response=resp)
@@ -405,31 +350,15 @@ def user_update_profile():
     new_user_name = conn.escape_string(req_json['name'])
 
     cursor.execute("SELECT id, username, isAnonymous FROM User WHERE email='" + user_email + "'")
-    data = cursor.fetchone()
-    if data is None:
+    user_data = cursor.fetchone()
+    if user_data is None:
         return jsonify(code=1, response="No user with such email!")
-
-    user_data = data
 
     cursor.execute("UPDATE User SET about='" + new_user_about + "', name='" + new_user_name +
                    "' WHERE email='" + user_email + "'")
     conn.commit()
 
-    cursor.execute("SELECT follower_email FROM Followers WHERE followee_email='" + user_email + "'")
-    data = cursor.fetchall()
-
-    # if data is not None:
-    followers_list = []
-    for t in data:
-        followers_list.append(t[0])
-
-    cursor.execute("SELECT followee_email FROM Followers WHERE follower_email='" + user_email + "'")
-    data = cursor.fetchall()
-
-    # if data is not None:
-    following_list = []
-    for t in data:
-        following_list.append(t[0])
+    follow_info = get_followers(cursor, user_email)
 
     resp = {
         "email": user_email,
@@ -438,8 +367,8 @@ def user_update_profile():
         "name": new_user_name,
         "isAnonymous": bool(user_data[2]),
         "id": user_data[0],
-        "followers": followers_list,
-        "following": following_list
+        "followers": follow_info['followers'],
+        "following": follow_info['following']
     }
 
     return jsonify(code=0, response=resp)
