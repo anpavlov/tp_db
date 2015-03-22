@@ -1,15 +1,13 @@
 # TODO: listPosts
-# TODO: return subscriptions
-# TODO: listFollowers and listFollowing change output ([user, ...])
 
-from ext import mysql, get_followers, user_exists
+from ext import mysql, get_followers, user_exists, get_subs
 from flask import request, jsonify, Blueprint
 from werkzeug.exceptions import BadRequest
 
 user_api = Blueprint('user_api', __name__)
 
 
-@user_api.route('/create', methods=['POST'])
+@user_api.route('/create/', methods=['POST'])
 def user_create():
     try:
         req_json = request.get_json()
@@ -19,13 +17,10 @@ def user_create():
     if not ('username' in req_json and 'about' in req_json and 'name' in req_json and 'email' in req_json):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
-    cursor = conn.cursor()
-
-    new_user_username = conn.escape_string(req_json['username'])
-    new_user_about = conn.escape_string(req_json['about'])
-    new_user_name = conn.escape_string(req_json['name'])
-    new_user_email = conn.escape_string(req_json['email'])
+    new_user_username = req_json['username']
+    new_user_about = req_json['about']
+    new_user_name = req_json['name']
+    new_user_email = req_json['email']
 
     if 'isAnonymous' in req_json:
         if req_json['isAnonymous'] is not False and req_json['isAnonymous'] is not True:
@@ -34,17 +29,15 @@ def user_create():
     else:
         new_user_is_anon = False
 
+    conn = mysql.get_db()
+    cursor = conn.cursor()
+
     if user_exists(cursor, new_user_email):
         return jsonify(code=5, response="User with such email already exists!")
 
-    cursor.execute("INSERT INTO User VALUES (null,'" + new_user_about + "','" + new_user_email + "','" +
-                   str(new_user_is_anon) + "','" + new_user_name + "','" + new_user_username + "')")
+    sql_data = (new_user_about, new_user_email, new_user_is_anon, new_user_name, new_user_username)
+    cursor.execute('INSERT INTO User VALUES (null,%s,%s,%s,%s,%s)', sql_data)
     conn.commit()
-
-    cursor.execute("SELECT id FROM User WHERE email='" + new_user_email + "'")
-
-    data = cursor.fetchone()  # got tuple
-    new_user_id = data[0]
 
     resp = {
         "email": new_user_email,
@@ -52,33 +45,32 @@ def user_create():
         "about": new_user_about,
         "name": new_user_name,
         "isAnonymous": new_user_is_anon,
-        "id": new_user_id,
-        "followers": [],
-        "following": []
+        "id": cursor.lastrowid,
     }
 
     return jsonify(code=0, response=resp)
 
 
-@user_api.route('/details', methods=['GET'])
+@user_api.route('/details/', methods=['GET'])
 def user_details():
     req_params = request.args
 
     if not ('user' in req_params):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
+    user_email = req_params['user']
+
+    conn = mysql.get_db()
     cursor = conn.cursor()
 
-    user_email = conn.escape_string(req_params['user'])
-
-    cursor.execute("SELECT * FROM User WHERE email='" + user_email + "'")
+    cursor.execute('SELECT * FROM User WHERE email=%s', (user_email,))
     user_data = cursor.fetchone()
 
     if user_data is None:
         return jsonify(code=1, response="No user with such email!")
 
     follow_info = get_followers(cursor, user_email)
+    subs_list = get_subs(cursor, user_email)
 
     resp = {
         "id": user_data[0],
@@ -88,12 +80,13 @@ def user_details():
         "name": user_data[4],
         "username": user_data[5],
         "followers": follow_info['followers'],
-        "following": follow_info['following']
+        "following": follow_info['following'],
+        "subscriptions": subs_list
     }
     return jsonify(code=0, response=resp)
 
 
-@user_api.route('/follow', methods=['POST'])
+@user_api.route('/follow/', methods=['POST'])
 def user_follow():
     try:
         req_json = request.get_json()
@@ -103,13 +96,13 @@ def user_follow():
     if not ('follower' in req_json and 'followee' in req_json):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
+    follower_email = req_json['follower']
+    followee_email = req_json['followee']
+
+    conn = mysql.get_db()
     cursor = conn.cursor()
 
-    follower_email = conn.escape_string(req_json['follower'])
-    followee_email = conn.escape_string(req_json['followee'])
-
-    cursor.execute("SELECT * FROM User WHERE email='" + follower_email + "'")
+    cursor.execute('SELECT * FROM User WHERE email=%s', (follower_email,))
     follower_data = cursor.fetchone()
 
     if follower_data is None:
@@ -118,10 +111,11 @@ def user_follow():
     if not user_exists(cursor, followee_email):
         return jsonify(code=1, response="No user with such email!")
 
-    cursor.execute("INSERT IGNORE INTO Followers VALUES ('" + follower_email + "','" + followee_email + "')")
+    cursor.execute("INSERT IGNORE INTO Followers VALUES (%s, %s)", (follower_email, followee_email))
     conn.commit()
 
     follow_info = get_followers(cursor, follower_email)
+    subs_list = get_subs(cursor, follower_email)
 
     resp = {
         "id": follower_data[0],
@@ -131,32 +125,24 @@ def user_follow():
         "name": follower_data[4],
         "username": follower_data[5],
         "followers": follow_info['followers'],
-        "following": follow_info['following']
+        "following": follow_info['following'],
+        "subscriptions": subs_list
     }
 
     return jsonify(code=0, response=resp)
 
 
-@user_api.route('/listFollowers', methods=['GET'])
+@user_api.route('/listFollowers/', methods=['GET'])
 def user_list_followers():
     req_params = request.args
 
     if not ('user' in req_params):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
-    cursor = conn.cursor()
+    user_email = req_params['user']
 
-    user_email = conn.escape_string(req_params['user'])
-
-    cursor.execute("SELECT * FROM User WHERE email='" + user_email + "'")
-    user_data = cursor.fetchone()
-
-    if user_data is None:
-        return jsonify(code=1, response="No user with such email!")
-
-    since_id = req_params.get('since_id')
-    if since_id is not None:
+    if "since_id" in req_params:
+        since_id = req_params['since_id']
         try:
             since_id = int(since_id)
         except ValueError:
@@ -164,81 +150,70 @@ def user_list_followers():
     else:
         since_id = 0
 
-    order = req_params.get('order')
-    if order is not None:
+    if "limit" in req_params:
+        limit = req_params['limit']
+        try:
+            limit = int(limit)
+        except ValueError:
+            return jsonify(code=3, response="Wrong parameters")
+    else:
+        limit = None
+
+    if "order" in req_params:
+        order = req_params['order']
         if order != 'asc' and order != 'desc':
             return jsonify(code=3, response="Wrong parameters")
     else:
         order = 'desc'
 
-    limit = req_params.get('limit')
-    if limit is not None:
-        try:
-            limit = int(limit)
-        except ValueError:
-            return jsonify(code=3, response="Wrong parameters")
+    conn = mysql.get_db()
+    cursor = conn.cursor()
 
-        cursor.execute("SELECT email FROM User WHERE id>" + str(since_id) +
-                       " AND email IN (SELECT follower_email FROM Followers WHERE followee_email='" +
-                       user_email + "') ORDER BY name " + order + " LIMIT " + str(limit))
-    else:
-        cursor.execute("SELECT email FROM User WHERE id>" + str(since_id) +
-                       " AND email IN (SELECT follower_email FROM Followers WHERE followee_email='" +
-                       user_email + "') ORDER BY name " + order)
+    if not user_exists(cursor, user_email):
+        return jsonify(code=1, response="No user with such email!")
+
+    query = "SELECT id, about, email, isAnonymous, name, username FROM Followers F " +\
+            "JOIN User U ON F.follower_email=U.email WHERE id>%s AND followee_email=%s ORDER BY name "
+    query += order
+    query += " LIMIT %s" if limit is not None else ""
+
+    sql_data = (since_id, user_email, limit) if limit is not None else (since_id, user_email)
+
+    cursor.execute(query, sql_data)
 
     data = cursor.fetchall()
 
-    followers_list = []
-    for t in data:
-        followers_list.append(t[0])
+    resp = []
+    for f in data:
+        follow_info = get_followers(cursor, f[2])
+        subs_list = get_subs(cursor, f[2])
+        user = {
+            "id": f[0],
+            "about": f[1],
+            "email": f[2],
+            "isAnonymous": bool(f[3]),
+            "name": f[4],
+            "username": f[5],
+            "followers": follow_info['followers'],
+            "following": follow_info['following'],
+            "subscriptions": subs_list
+        }
+        resp.append(user)
 
-    cursor.execute("SELECT followee_email FROM Followers WHERE follower_email='" + user_email + "'")
-    data = cursor.fetchall()
-
-    following_list = []
-    for t in data:
-        following_list.append(t[0])
-
-    resp = {
-        "id": user_data[0],
-        "about": user_data[1],
-        "email": user_data[2],
-        "isAnonymous": bool(user_data[3]),
-        "name": user_data[4],
-        "username": user_data[5],
-        "followers": followers_list,
-        "following": following_list
-    }
     return jsonify(code=0, response=resp)
 
 
-@user_api.route('/listFollowing', methods=['GET'])
+@user_api.route('/listFollowing/', methods=['GET'])
 def user_list_following():
     req_params = request.args
 
     if not ('user' in req_params):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
-    cursor = conn.cursor()
+    user_email = req_params['user']
 
-    user_email = conn.escape_string(req_params['user'])
-
-    cursor.execute("SELECT * FROM User WHERE email='" + user_email + "'")
-    user_data = cursor.fetchone()
-
-    if user_data is None:
-        return jsonify(code=1, response="No user with such email!")
-
-    cursor.execute("SELECT follower_email FROM Followers WHERE followee_email='" + user_email + "'")
-    data = cursor.fetchall()
-
-    followers_list = []
-    for t in data:
-        followers_list.append(t[0])
-
-    since_id = req_params.get('since_id')
-    if since_id is not None:
+    if "since_id" in req_params:
+        since_id = req_params['since_id']
         try:
             since_id = int(since_id)
         except ValueError:
@@ -246,48 +221,60 @@ def user_list_following():
     else:
         since_id = 0
 
-    order = req_params.get('order')
-    if order is not None:
+    if "limit" in req_params:
+        limit = req_params['limit']
+        try:
+            limit = int(limit)
+        except ValueError:
+            return jsonify(code=3, response="Wrong parameters")
+    else:
+        limit = None
+
+    if "order" in req_params:
+        order = req_params['order']
         if order != 'asc' and order != 'desc':
             return jsonify(code=3, response="Wrong parameters")
     else:
         order = 'desc'
 
-    limit = req_params.get('limit')
-    if limit is not None:
-        try:
-            limit = int(limit)
-        except ValueError:
-            return jsonify(code=3, response="Wrong parameters")
+    conn = mysql.get_db()
+    cursor = conn.cursor()
 
-        cursor.execute("SELECT email FROM User WHERE id>" + str(since_id) +
-                       " AND email IN (SELECT followee_email FROM Followers WHERE follower_email='" +
-                       user_email + "') ORDER BY name " + order + " LIMIT " + str(limit))
-    else:
-        cursor.execute("SELECT email FROM User WHERE id>" + str(since_id) +
-                       " AND email IN (SELECT followee_email FROM Followers WHERE follower_email='" +
-                       user_email + "') ORDER BY name " + order)
+    if not user_exists(cursor, user_email):
+        return jsonify(code=1, response="No user with such email!")
+
+    query = "SELECT id, about, email, isAnonymous, name, username FROM Followers F " +\
+            "JOIN User U ON F.followee_email=U.email WHERE id>%s AND follower_email=%s ORDER BY name "
+    query += order
+    query += " LIMIT %s" if limit is not None else ""
+
+    sql_data = (since_id, user_email, limit) if limit is not None else (since_id, user_email)
+
+    cursor.execute(query, sql_data)
 
     data = cursor.fetchall()
 
-    following_list = []
-    for t in data:
-        following_list.append(t[0])
+    resp = []
+    for f in data:
+        follow_info = get_followers(cursor, f[2])
+        subs_list = get_subs(cursor, f[2])
+        user = {
+            "id": f[0],
+            "about": f[1],
+            "email": f[2],
+            "isAnonymous": bool(f[3]),
+            "name": f[4],
+            "username": f[5],
+            "followers": follow_info['followers'],
+            "following": follow_info['following'],
+            "subscriptions": subs_list
+        }
+        resp.append(user)
 
-    resp = {
-        "id": user_data[0],
-        "about": user_data[1],
-        "email": user_data[2],
-        "isAnonymous": bool(user_data[3]),
-        "name": user_data[4],
-        "username": user_data[5],
-        "followers": followers_list,
-        "following": following_list
-    }
     return jsonify(code=0, response=resp)
 
 
-@user_api.route('/unfollow', methods=['POST'])
+@user_api.route('/unfollow/', methods=['POST'])
 def user_unfollow():
     try:
         req_json = request.get_json()
@@ -297,13 +284,13 @@ def user_unfollow():
     if not ('follower' in req_json and 'followee' in req_json):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
+    follower_email = req_json['follower']
+    followee_email = req_json['followee']
+
+    conn = mysql.get_db()
     cursor = conn.cursor()
 
-    follower_email = conn.escape_string(req_json['follower'])
-    followee_email = conn.escape_string(req_json['followee'])
-
-    cursor.execute("SELECT * FROM User WHERE email='" + follower_email + "'")
+    cursor.execute("SELECT * FROM User WHERE email=%s", (follower_email,))
     follower_data = cursor.fetchone()
 
     if follower_data is None:
@@ -312,11 +299,12 @@ def user_unfollow():
     if not user_exists(cursor, followee_email):
         return jsonify(code=1, response="No user with such email!")
 
-    cursor.execute("DELETE FROM Followers WHERE follower_email='" + follower_email +
-                   "' AND followee_email='" + followee_email + "'")
+    cursor.execute("DELETE FROM Followers WHERE follower_email=%s AND followee_email=%s",
+                   (follower_email, followee_email))
     conn.commit()
 
     follow_info = get_followers(cursor, follower_email)
+    subs_list = get_subs(cursor, follower_email)
 
     resp = {
         "id": follower_data[0],
@@ -326,13 +314,14 @@ def user_unfollow():
         "name": follower_data[4],
         "username": follower_data[5],
         "followers": follow_info['followers'],
-        "following": follow_info['following']
+        "following": follow_info['following'],
+        "subscriptions": subs_list
     }
 
     return jsonify(code=0, response=resp)
 
 
-@user_api.route('/updateProfile', methods=['POST'])
+@user_api.route('/updateProfile/', methods=['POST'])
 def user_update_profile():
     try:
         req_json = request.get_json()
@@ -342,23 +331,24 @@ def user_update_profile():
     if not ('user' in req_json and 'about' in req_json and 'name' in req_json):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
+    user_email = req_json['user']
+    new_user_about = req_json['about']
+    new_user_name = req_json['name']
+
+    conn = mysql.get_db()
     cursor = conn.cursor()
 
-    user_email = conn.escape_string(req_json['user'])
-    new_user_about = conn.escape_string(req_json['about'])
-    new_user_name = conn.escape_string(req_json['name'])
-
-    cursor.execute("SELECT id, username, isAnonymous FROM User WHERE email='" + user_email + "'")
+    cursor.execute("SELECT id, username, isAnonymous FROM User WHERE email=%s", (user_email,))
     user_data = cursor.fetchone()
     if user_data is None:
         return jsonify(code=1, response="No user with such email!")
 
-    cursor.execute("UPDATE User SET about='" + new_user_about + "', name='" + new_user_name +
-                   "' WHERE email='" + user_email + "'")
+    sql_data = (new_user_about, new_user_name, user_email)
+    cursor.execute("UPDATE User SET about=%s, name=%s WHERE email=%s", sql_data)
     conn.commit()
 
     follow_info = get_followers(cursor, user_email)
+    subs_list = get_subs(cursor, user_email)
 
     resp = {
         "email": user_email,
@@ -368,7 +358,8 @@ def user_update_profile():
         "isAnonymous": bool(user_data[2]),
         "id": user_data[0],
         "followers": follow_info['followers'],
-        "following": follow_info['following']
+        "following": follow_info['following'],
+        "subscriptions": subs_list
     }
 
     return jsonify(code=0, response=resp)

@@ -7,7 +7,7 @@ from werkzeug.exceptions import BadRequest
 forum_api = Blueprint('forum_api', __name__)
 
 
-@forum_api.route('/create', methods=['POST'])
+@forum_api.route('/create/', methods=['POST'])
 def forum_create():
     try:
         req_json = request.get_json()
@@ -17,40 +17,35 @@ def forum_create():
     if not ('name' in req_json and 'short_name' in req_json and 'user' in req_json):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
-    cursor = conn.cursor()
+    new_forum_name = req_json['name']
+    new_forum_short_name = req_json['short_name']
+    new_forum_user = req_json['user']
 
-    new_forum_name = conn.escape_string(req_json['name'])
-    new_forum_short_name = conn.escape_string(req_json['short_name'])
-    new_forum_user = conn.escape_string(req_json['user'])
+    conn = mysql.get_db()
+    cursor = conn.cursor()
 
     if not user_exists(cursor, new_forum_user):
         return jsonify(code=1, response="No user with such email!")
 
-    cursor.execute("SELECT id, user FROM Forum WHERE name='" + new_forum_name +
-                   "' AND short_name='" + new_forum_short_name + "'")
+    cursor.execute("SELECT id, user FROM Forum WHERE name=%s AND short_name=%s",
+                   (new_forum_name, new_forum_short_name))
     data = cursor.fetchone()
     if data is not None:
-
         resp = {
             "id": data[0],
             "name": new_forum_name,
             "short_name": new_forum_short_name,
             "user": data[1]
         }
-
         return jsonify(code=0, response=resp)
+    # TODO: know if name exists but shorts are not equal or naoborot
 
-    cursor.execute("INSERT INTO Forum VALUES (null,'" + new_forum_name + "','" +
-                   new_forum_short_name + "','" + new_forum_user + "')")
+    sql_data = (new_forum_name, new_forum_short_name, new_forum_user)
+    cursor.execute("INSERT INTO Forum VALUES (null, %s, %s, %s)", sql_data)
     conn.commit()
 
-    cursor.execute("SELECT id FROM Forum WHERE short_name='" + new_forum_short_name + "'")
-
-    data = cursor.fetchone()
-
     resp = {
-        "id": data[0],
+        "id": cursor.lastrowid,
         "name": new_forum_name,
         "short_name": new_forum_short_name,
         "user": new_forum_user
@@ -59,19 +54,19 @@ def forum_create():
     return jsonify(code=0, response=resp)
 
 
-@forum_api.route('/details', methods=['GET'])
+@forum_api.route('/details/', methods=['GET'])
 def forum_details():
     req_params = request.args
 
     if not ('forum' in req_params):
         return jsonify(code=3, response="Wrong parameters")
 
-    conn = mysql.connect()
+    forum_short_name = req_params['forum']
+
+    conn = mysql.get_db()
     cursor = conn.cursor()
 
-    forum_short_name = conn.escape_string(req_params['forum'])
-
-    cursor.execute("SELECT * FROM Forum WHERE short_name='" + forum_short_name + "'")
+    cursor.execute("SELECT * FROM Forum WHERE short_name=%s", (forum_short_name,))
     data = cursor.fetchone()
     if data is None:
         return jsonify(code=1, response="No forum with such short name!")
