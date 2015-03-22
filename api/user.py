@@ -1,8 +1,7 @@
-# TODO: listPosts
-
 from ext import mysql, get_followers, user_exists, get_subs
 from flask import request, jsonify, Blueprint
 from werkzeug.exceptions import BadRequest
+from datetime import datetime
 
 user_api = Blueprint('user_api', __name__)
 
@@ -18,9 +17,20 @@ def user_create():
         return jsonify(code=3, response="Wrong parameters")
 
     new_user_username = req_json['username']
+    if new_user_username is None:
+        new_user_username = ""
+
     new_user_about = req_json['about']
+    if new_user_about is None:
+        new_user_about = ""
+
     new_user_name = req_json['name']
+    if new_user_name is None:
+        new_user_name = ""
+
     new_user_email = req_json['email']
+    if new_user_email is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     if 'isAnonymous' in req_json:
         if req_json['isAnonymous'] is not False and req_json['isAnonymous'] is not True:
@@ -59,6 +69,8 @@ def user_details():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_params['user']
+    if user_email is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -97,7 +109,12 @@ def user_follow():
         return jsonify(code=3, response="Wrong parameters")
 
     follower_email = req_json['follower']
+    if follower_email is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     followee_email = req_json['followee']
+    if followee_email is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -140,6 +157,8 @@ def user_list_followers():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_params['user']
+    if user_email is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     if "since_id" in req_params:
         since_id = req_params['since_id']
@@ -211,6 +230,8 @@ def user_list_following():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_params['user']
+    if user_email is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     if "since_id" in req_params:
         since_id = req_params['since_id']
@@ -274,6 +295,84 @@ def user_list_following():
     return jsonify(code=0, response=resp)
 
 
+@user_api.route('/listPosts/', methods=['GET'])
+def user_list_posts():
+    req_params = request.args
+
+    if not ('user' in req_params):
+        return jsonify(code=3, response="Wrong parameters")
+
+    user_email = req_params['user']
+    if user_email is None:
+        return jsonify(code=3, response="Wrong parameters")
+
+    if "limit" in req_params:
+        limit = req_params['limit']
+        try:
+            limit = int(limit)
+        except ValueError:
+            return jsonify(code=3, response="Wrong parameters")
+    else:
+        limit = None
+
+    if "order" in req_params:
+        order = req_params['order']
+        if order != 'asc' and order != 'desc':
+            return jsonify(code=3, response="Wrong parameters")
+    else:
+        order = 'desc'
+
+    if "since" in req_params:
+        since = req_params['since']
+        try:
+            datetime.strptime(since, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return jsonify(code=3, response="Wrong parameters")
+    else:
+        since = 0
+
+    conn = mysql.get_db()
+    cursor = conn.cursor()
+
+    if not user_exists(cursor, user_email):
+        return jsonify(code=1, response="No user with such email!")
+
+    query = "SELECT id, forum, thread, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
+            "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points FROM Post " \
+            "WHERE date>=%s AND user=%s ORDER BY d "
+    query += order
+    query += " LIMIT %s" if limit is not None else ""
+
+    sql_data = (since, user_email, limit) if limit is not None else (since, user_email)
+
+    cursor.execute(query, sql_data)
+
+    data = cursor.fetchall()
+
+    resp = []
+    for p in data:
+        post = {
+            "id": p[0],
+            "forum": p[1],
+            "thread": p[2],
+            "user": user_email,
+            "parent": p[3],
+            "message": p[4],
+            "date": p[5],
+            "isApproved": bool(p[6]),
+            "isHighlighted": bool(p[7]),
+            "isEdited": bool(p[8]),
+            "isSpam": bool(p[9]),
+            "isDeleted": bool(p[10]),
+            "likes": p[11],
+            "dislikes": p[12],
+            "points": p[13]
+        }
+        resp.append(post)
+
+    return jsonify(code=0, response=resp)
+
+
 @user_api.route('/unfollow/', methods=['POST'])
 def user_unfollow():
     try:
@@ -285,7 +384,12 @@ def user_unfollow():
         return jsonify(code=3, response="Wrong parameters")
 
     follower_email = req_json['follower']
+    if follower_email is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     followee_email = req_json['followee']
+    if followee_email is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -332,8 +436,16 @@ def user_update_profile():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_json['user']
+    if user_email is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     new_user_about = req_json['about']
+    if new_user_about is None:
+        new_user_about = ""
+
     new_user_name = req_json['name']
+    if new_user_name is None:
+        new_user_name = ""
 
     conn = mysql.get_db()
     cursor = conn.cursor()

@@ -1,8 +1,9 @@
-# TODO: list, listPosts
+# TODO: listPosts
 
-from ext import mysql, user_exists, thread_exists, user_details, forum_details, thread_details
+from ext import mysql, user_exists, thread_exists, user_details, forum_details, thread_details as thread_detail, forum_exists
 from flask import request, jsonify, Blueprint
 from werkzeug.exceptions import BadRequest
+from datetime import datetime
 
 thread_api = Blueprint('thread_api', __name__)
 
@@ -20,11 +21,28 @@ def thread_create():
         return jsonify(code=3, response="Wrong parameters")
 
     new_thread_forum = req_json['forum']
+    if new_thread_forum is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     new_thread_title = req_json['title']
+    if new_thread_title is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     new_thread_user = req_json['user']
+    if new_thread_user is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     new_thread_date = req_json['date']
+    if new_thread_date is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     new_thread_message = req_json['message']
+    if new_thread_message is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     new_thread_slug = req_json['slug']
+    if new_thread_slug is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     if req_json['isDeleted'] is not False and req_json['isDeleted'] is not True:
         return jsonify(code=3, response="Wrong parameters")
@@ -127,6 +145,91 @@ def thread_details():
     return jsonify(code=0, response=resp)
 
 
+@thread_api.route('/list/', methods=['GET'])
+def thread_list():
+    req_params = request.args
+
+    if not ('forum' in req_params or 'user' in req_params) or 'forum' in req_params and 'user' in req_params:
+        return jsonify(code=3, response="Wrong parameters")
+
+    if "limit" in req_params:
+        limit = req_params['limit']
+        try:
+            limit = int(limit)
+        except ValueError:
+            return jsonify(code=3, response="Wrong parameters")
+    else:
+        limit = None
+
+    if "order" in req_params:
+        order = req_params['order']
+        if order != 'asc' and order != 'desc':
+            return jsonify(code=3, response="Wrong parameters")
+    else:
+        order = 'desc'
+
+    if "since" in req_params:
+        since = req_params['since']
+        try:
+            datetime.strptime(since, "%Y-%m-%d %H:%M:%S")
+        except ValueError:
+            return jsonify(code=3, response="Wrong parameters")
+    else:
+        since = 0
+
+    conn = mysql.get_db()
+    cursor = conn.cursor()
+
+    is_by_forum = 'forum' in req_params
+    if is_by_forum:
+        entity = req_params['forum']
+        if entity is None:
+            return jsonify(code=3, response="Wrong parameters")
+        if not forum_exists(cursor, entity):
+            return jsonify(code=1, response="No forum with such short name!")
+    else:
+        entity = req_params['user']
+        if entity is None:
+            return jsonify(code=3, response="Wrong parameters")
+        if not user_exists(cursor, entity):
+            return jsonify(code=1, response="No user with such email!")
+
+    query = "SELECT id, forum, user, title, message, slug, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d, " \
+            "isClosed, isDeleted, posts, likes, dislikes, points FROM Thread " \
+            "WHERE date>=%s AND "
+    query += "forum" if is_by_forum else "user"
+    query += "=%s ORDER BY d "
+    query += order
+    query += " LIMIT %s" if limit is not None else ""
+
+    sql_data = (since, entity, limit) if limit is not None else (since, entity)
+
+    cursor.execute(query, sql_data)
+
+    data = cursor.fetchall()
+
+    resp = []
+    for t in data:
+        post = {
+            "id": t[0],
+            "forum": t[1],
+            "user": t[2],
+            "title": t[3],
+            "message": t[4],
+            "slug": t[5],
+            "date": t[6],
+            "isClosed": bool(t[7]),
+            "isDeleted": bool(t[8]),
+            "posts": t[9],
+            "likes": t[10],
+            "dislikes": t[11],
+            "points": t[12]
+        }
+        resp.append(post)
+
+    return jsonify(code=0, response=resp)
+
+
 @thread_api.route('/close/', methods=['POST'])
 def thread_close():
     try:
@@ -201,7 +304,6 @@ def thread_open():
 
 @thread_api.route('/remove/', methods=['POST'])
 def thread_remove():
-    # TODO: remove posts inside
     try:
         req_json = request.get_json()
     except BadRequest:
@@ -226,7 +328,8 @@ def thread_remove():
         return jsonify(code=1, response="No thread with such id!")
 
     if data[0] is False:
-        cursor.execute("UPDATE Thread SET isDeleted=TRUE WHERE id=%s", (thread_id,))
+        cursor.execute("UPDATE Thread SET isDeleted=1 WHERE id=%s", (thread_id,))
+        cursor.execute("UPDATE Post SET isDeleted=1 WHERE thread=%s", (thread_id,))
         conn.commit()
 
     resp = {
@@ -238,6 +341,7 @@ def thread_remove():
 
 @thread_api.route('/restore/', methods=['POST'])
 def thread_restore():
+    # TODO: (?) restore all posts
     try:
         req_json = request.get_json()
     except BadRequest:
@@ -289,6 +393,8 @@ def thread_subscribe():
         return jsonify(code=3, response="Wrong parameters")
 
     user = req_json['user']
+    if user is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -327,6 +433,8 @@ def thread_unsubscribe():
         return jsonify(code=3, response="Wrong parameters")
 
     user = req_json['user']
+    if user is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -365,7 +473,12 @@ def thread_update():
         return jsonify(code=3, response="Wrong parameters")
 
     thread_new_message = req_json['message']
+    if thread_new_message is None:
+        return jsonify(code=3, response="Wrong parameters")
+
     thread_new_slug = req_json['slug']
+    if thread_new_slug is None:
+        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -377,7 +490,7 @@ def thread_update():
     cursor.execute("UPDATE Thread SET message=%s AND slug=%s WHERE id=%s", sql_data)
     conn.commit()
 
-    resp = thread_details(cursor, thread_id)
+    resp = thread_detail(cursor, thread_id)
 
     return jsonify(code=0, response=resp)
 
@@ -420,6 +533,6 @@ def thread_vote():
     cursor.execute("UPDATE Thread SET points=points+%s WHERE id=%s", (vote, thread_id))
     conn.commit()
 
-    resp = thread_details(cursor, thread_id)
+    resp = thread_detail(cursor, thread_id)
 
     return jsonify(code=0, response=resp)
