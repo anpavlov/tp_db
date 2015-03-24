@@ -93,7 +93,7 @@ def post_create():
     if new_post_parent is None:
         cursor.execute("SELECT posts FROM Thread WHERE id=%s", (new_post_thread,))
         posts_in_thread = int(cursor.fetchone()[0])
-        new_post_path = '{0:04d}'.format(posts_in_thread + 1)
+        new_post_path = '{0:011d}'.format(posts_in_thread + 1)
     else:
         if not post_exists(cursor, new_post_parent):
             return jsonify(code=1, response="No post with such id!")
