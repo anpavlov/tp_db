@@ -17,20 +17,9 @@ def user_create():
         return jsonify(code=3, response="Wrong parameters")
 
     new_user_username = req_json['username']
-    if new_user_username is None:
-        new_user_username = ""
-
     new_user_about = req_json['about']
-    if new_user_about is None:
-        new_user_about = ""
-
     new_user_name = req_json['name']
-    if new_user_name is None:
-        new_user_name = ""
-
     new_user_email = req_json['email']
-    if new_user_email is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     if 'isAnonymous' in req_json:
         if req_json['isAnonymous'] is not False and req_json['isAnonymous'] is not True:
@@ -69,8 +58,6 @@ def user_details():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_params['user']
-    if user_email is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -109,12 +96,7 @@ def user_follow():
         return jsonify(code=3, response="Wrong parameters")
 
     follower_email = req_json['follower']
-    if follower_email is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     followee_email = req_json['followee']
-    if followee_email is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -157,8 +139,6 @@ def user_list_followers():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_params['user']
-    if user_email is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     if "since_id" in req_params:
         since_id = req_params['since_id']
@@ -192,7 +172,7 @@ def user_list_followers():
         return jsonify(code=1, response="No user with such email!")
 
     query = "SELECT id, about, email, isAnonymous, name, username FROM Followers F " +\
-            "JOIN User U ON F.follower_email=U.email WHERE id>%s AND followee_email=%s ORDER BY name "
+            "JOIN User U ON F.follower_email=U.email WHERE id>=%s AND followee_email=%s ORDER BY name "
     query += order
     query += " LIMIT %s" if limit is not None else ""
 
@@ -230,8 +210,6 @@ def user_list_following():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_params['user']
-    if user_email is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     if "since_id" in req_params:
         since_id = req_params['since_id']
@@ -265,7 +243,7 @@ def user_list_following():
         return jsonify(code=1, response="No user with such email!")
 
     query = "SELECT id, about, email, isAnonymous, name, username FROM Followers F " +\
-            "JOIN User U ON F.followee_email=U.email WHERE id>%s AND follower_email=%s ORDER BY name "
+            "JOIN User U ON F.followee_email=U.email WHERE id>=%s AND follower_email=%s ORDER BY name "
     query += order
     query += " LIMIT %s" if limit is not None else ""
 
@@ -303,8 +281,6 @@ def user_list_posts():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_params['user']
-    if user_email is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     if "limit" in req_params:
         limit = req_params['limit']
@@ -384,12 +360,7 @@ def user_unfollow():
         return jsonify(code=3, response="Wrong parameters")
 
     follower_email = req_json['follower']
-    if follower_email is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     followee_email = req_json['followee']
-    if followee_email is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -436,16 +407,8 @@ def user_update_profile():
         return jsonify(code=3, response="Wrong parameters")
 
     user_email = req_json['user']
-    if user_email is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     new_user_about = req_json['about']
-    if new_user_about is None:
-        new_user_about = ""
-
     new_user_name = req_json['name']
-    if new_user_name is None:
-        new_user_name = ""
 
     conn = mysql.get_db()
     cursor = conn.cursor()

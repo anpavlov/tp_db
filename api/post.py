@@ -1,4 +1,5 @@
-from ext import mysql, user_exists, forum_exists, thread_exists, post_exists, user_details, forum_details, thread_details
+from ext import mysql, user_exists, forum_exists, thread_exists,\
+    post_exists, user_details, forum_details, thread_details, post_details as post_detail
 from flask import request, jsonify, Blueprint
 from werkzeug.exceptions import BadRequest
 from datetime import datetime
@@ -18,24 +19,10 @@ def post_create():
         return jsonify(code=3, response="Wrong parameters")
 
     new_post_forum = req_json['forum']
-    if new_post_forum is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     new_post_thread = req_json['thread']
-    if new_post_thread is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     new_post_user = req_json['user']
-    if new_post_user is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     new_post_date = req_json['date']
-    if new_post_date is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     new_post_message = req_json['message']
-    if new_post_message is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     if 'isApproved' in req_json:
         if req_json['isApproved'] is not False and req_json['isApproved'] is not True:
@@ -98,26 +85,36 @@ def post_create():
     if not thread_exists(cursor, new_post_thread):
         return jsonify(code=1, response="No thread with such id!")
 
-    # TODO: calculate path
-    # if new_post_parent is not None:
-    #     if not post_exists(cursor, new_post_parent):
-    #         return jsonify(code=1, response="No post with such id!")
-    # else:
-    #     cursor.execute("SELECT posts")
+    cursor.execute("SELECT 1 FROM Thread WHERE id=%s AND forum=%s", (new_post_thread, new_post_forum))
+    data = cursor.fetchone()
+    if data is None:
+        return jsonify(code=3, response="No such thread in this forum")
 
-    sql_data = (new_post_forum, new_post_thread, new_post_user, new_post_parent, "*",  # * - path
+    if new_post_parent is None:
+        cursor.execute("SELECT posts FROM Thread WHERE id=%s", (new_post_thread,))
+        posts_in_thread = int(cursor.fetchone()[0])
+        new_post_path = '{0:04d}'.format(posts_in_thread + 1)
+    else:
+        if not post_exists(cursor, new_post_parent):
+            return jsonify(code=1, response="No post with such id!")
+        cursor.execute("SELECT childrenAmnt, path FROM Post WHERE id=%s", (new_post_parent,))
+        data = cursor.fetchone()
+        new_post_path = data[1] + '{0:04d}'.format(int(data[0]) + 1)
+
+    sql_data = (new_post_forum, new_post_thread, new_post_user, new_post_parent, new_post_path,
                 new_post_message, new_post_date, new_post_is_approved, new_post_is_highlighted,
                 new_post_is_edited, new_post_is_spam, new_post_is_deleted)
     #                                                              V - children amount
     cursor.execute("INSERT INTO Post VALUES (null, %s, %s, %s, %s, 0, %s, %s, %s, %s, %s, %s, %s, %s, 0, 0, 0)",
                    sql_data)
+    new_post_id = cursor.lastrowid
     cursor.execute("UPDATE Thread SET posts=posts+1 WHERE id=%s", (new_post_thread,))
     conn.commit()
 
     resp = {
         "date": new_post_date,
         "forum": new_post_forum,
-        "id": cursor.lastrowid,
+        "id": new_post_id,
         "isApproved": new_post_is_approved,
         "isHighlighted": new_post_is_highlighted,
         "isEdited": new_post_is_edited,
@@ -157,6 +154,10 @@ def post_details():
 
     if 'related' in req_params:
         related_list = request.args.getlist('related')
+
+        for el in related_list:
+            if el != 'forum' and el != 'user' and el != 'thread':
+                return jsonify(code=3, response="Wrong parameters")
 
         if 'forum' in related_list:
             forum_info = forum_details(cursor, data[0])
@@ -236,14 +237,10 @@ def post_list():
     is_by_forum = 'forum' in req_params
     if is_by_forum:
         entity = req_params['forum']
-        if entity is None:
-            return jsonify(code=3, response="Wrong parameters")
         if not forum_exists(cursor, entity):
             return jsonify(code=1, response="No forum with such short name!")
     else:
         entity = req_params['thread']
-        if entity is None:
-            return jsonify(code=3, response="Wrong parameters")
         try:
             entity = int(entity)
         except ValueError:
@@ -308,7 +305,7 @@ def post_remove():
     conn = mysql.get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT isDeleted FROM Post WHERE id=%s", (post_id,))
+    cursor.execute("SELECT isDeleted, thread FROM Post WHERE id=%s", (post_id,))
     data = cursor.fetchone()
 
     if data is None:
@@ -316,6 +313,7 @@ def post_remove():
 
     if data[0] == 0:
         cursor.execute("UPDATE Post SET isDeleted=1 WHERE id=%s", (post_id,))
+        cursor.execute("UPDATE Thread SET posts=posts-1 WHERE id=%s", (data[1],))
         conn.commit()
 
     resp = {
@@ -344,7 +342,7 @@ def post_restore():
     conn = mysql.get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT isDeleted FROM Post WHERE id=%s", (post_id,))
+    cursor.execute("SELECT isDeleted, thread FROM Post WHERE id=%s", (post_id,))
     data = cursor.fetchone()
 
     if data is None:
@@ -352,6 +350,7 @@ def post_restore():
 
     if data[0] == 1:
         cursor.execute("UPDATE Post SET isDeleted=0 WHERE id=%s", (post_id,))
+        cursor.execute("UPDATE Thread SET posts=posts+1 WHERE id=%s", (data[1],))
         conn.commit()
 
     resp = {
@@ -378,8 +377,6 @@ def post_update():
         return jsonify(code=3, response="Wrong parameters")
 
     new_post_message = req_json['message']
-    if new_post_message is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -454,6 +451,6 @@ def post_vote():
     cursor.execute("UPDATE Post SET points=points+%s WHERE id=%s", (vote, post_id))
     conn.commit()
 
-    resp = thread_details(cursor, post_id)
+    resp = post_detail(cursor, post_id)
 
     return jsonify(code=0, response=resp)

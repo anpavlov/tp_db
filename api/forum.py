@@ -17,16 +17,8 @@ def forum_create():
         return jsonify(code=3, response="Wrong parameters")
 
     new_forum_name = req_json['name']
-    if new_forum_name is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     new_forum_short_name = req_json['short_name']
-    if new_forum_short_name is None:
-        return jsonify(code=3, response="Wrong parameters")
-
     new_forum_user = req_json['user']
-    if new_forum_user is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -69,8 +61,6 @@ def forum_details():
         return jsonify(code=3, response="Wrong parameters")
 
     forum_short_name = req_params['forum']
-    if forum_short_name is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
@@ -105,8 +95,6 @@ def forum_list_posts():
         return jsonify(code=3, response="Wrong parameters")
 
     forum = req_params['forum']
-    if forum is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     if "limit" in req_params:
         limit = req_params['limit']
@@ -144,6 +132,10 @@ def forum_list_posts():
     related_user = False
     if 'related' in req_params:
         related_list = request.args.getlist('related')
+        for el in related_list:
+            if el != 'forum' and el != 'user' and el != 'thread':
+                return jsonify(code=3, response="Wrong parameters")
+
         if 'forum' in related_list:
             related_forum = True
         if 'thread' in related_list:
@@ -209,8 +201,6 @@ def forum_list_threads():
         return jsonify(code=3, response="Wrong parameters")
 
     forum = req_params['forum']
-    if forum is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     if "limit" in req_params:
         limit = req_params['limit']
@@ -247,6 +237,11 @@ def forum_list_threads():
     related_user = False
     if 'related' in req_params:
         related_list = request.args.getlist('related')
+
+        for el in related_list:
+            if el != 'forum' and el != 'user':
+                return jsonify(code=3, response="Wrong parameters")
+
         if 'forum' in related_list:
             related_forum = True
         if 'user' in related_list:
@@ -303,8 +298,6 @@ def forum_list_users():
         return jsonify(code=3, response="Wrong parameters")
 
     forum = req_params['forum']
-    if forum is None:
-        return jsonify(code=3, response="Wrong parameters")
 
     if "limit" in req_params:
         limit = req_params['limit']

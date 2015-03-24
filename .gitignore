@@ -1,3 +1,6 @@
 .idea
 tp_db_venv
 *.pyc
+DUMP
+alog.txt
+req.txt

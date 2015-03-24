@@ -1,6 +1,7 @@
 from flaskext.mysql import MySQL
 
 mysql = MySQL()
+posts = 0
 
 
 def tuple_of_users_to_arr(data):
@@ -131,6 +132,33 @@ def thread_details(cursor, thread_id):
         "likes": data[9],
         "dislikes": data[10],
         "points": data[11]
+    }
+
+    return resp
+
+
+def post_details(cursor, post_id):
+    cursor.execute("""SELECT forum, thread, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T'),
+                      isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes,
+                      dislikes, points FROM Post WHERE id=%s""", (post_id,))
+    data = cursor.fetchone()
+
+    resp = {
+        "id": post_id,
+        "forum": data[0],
+        "thread": data[1],
+        "user": data[2],
+        "parent": data[3],
+        "message": data[4],
+        "date": data[5],
+        "isApproved": bool(data[6]),
+        "isHighlighted": bool(data[7]),
+        "isEdited": bool(data[8]),
+        "isSpam": bool(data[9]),
+        "isDeleted": bool(data[10]),
+        "likes": data[11],
+        "dislikes": data[12],
+        "points": data[13]
     }
 
     return resp
