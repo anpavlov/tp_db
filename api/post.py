@@ -61,10 +61,6 @@ def post_create():
 
     if 'parent' in req_json:
         new_post_parent = req_json['parent']
-        try:
-            new_post_parent = int(new_post_parent)
-        except ValueError:
-            return jsonify(code=3, response="Wrong parameters")
     else:
         new_post_parent = None
 
@@ -95,6 +91,10 @@ def post_create():
         posts_in_thread = int(cursor.fetchone()[0])
         new_post_path = '{0:011d}'.format(posts_in_thread + 1)
     else:
+        try:
+            new_post_parent = int(new_post_parent)
+        except ValueError:
+            return jsonify(code=3, response="Wrong parameters")
         if not post_exists(cursor, new_post_parent):
             return jsonify(code=1, response="No post with such id!")
         cursor.execute("SELECT childrenAmnt, path FROM Post WHERE id=%s", (new_post_parent,))
