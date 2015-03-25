@@ -264,6 +264,7 @@ def thread_list_posts():
         return jsonify(code=1, response="No thread with such id!")
 
     if sort == 'flat':
+        # flat
         query = "SELECT id, forum, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
                 "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points FROM Post " \
                 "WHERE date>=%s AND thread=%s ORDER BY d "
@@ -275,21 +276,66 @@ def thread_list_posts():
         data = cursor.fetchall()
 
     elif sort == 'tree':
-        # TODO: tree sort
-        query = "SELECT id, forum, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
-                "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points FROM Post " \
-                "WHERE date>=%s AND thread=%s ORDER BY d "
-        query += order
-        query += " LIMIT %s" if limit is not None else ""
-        sql_data = (since, thread, limit) if limit is not None else (since, thread)
+        #  tree
+        if order == 'asc':
+            # tree -> asc
+            query = "SELECT id, forum, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
+                    "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points FROM Post " \
+                    "WHERE date>=%s AND thread=%s ORDER BY path ASC"
+            query += " LIMIT %s" if limit is not None else ""
+            sql_data = (since, thread, limit) if limit is not None else (since, thread)
 
-        cursor.execute(query, sql_data)
-        data = cursor.fetchall()
+            cursor.execute(query, sql_data)
+            data = cursor.fetchall()
+        else:
+            # tree -> desc
+            query = "SELECT id, forum, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
+                    "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points, path, childrenAmnt FROM Post " \
+                    "WHERE date>=%s AND thread=%s AND parent IS NULL ORDER BY path DESC"
+            query += " LIMIT %s" if limit is not None else ""
+            sql_data = (since, thread, limit) if limit is not None else (since, thread)
+
+            cursor.execute(query, sql_data)
+            roots = cursor.fetchall()
+            data = []
+            if limit is not None:
+                # tree -> desc -> limit
+                posts = 0
+                for root in roots:
+                    if posts < limit:
+                        data.append(root)
+                        posts += 1
+                        if posts < limit:
+                            parent_path = root[14] + '.%'
+                            query = "SELECT id, forum, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
+                                    "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points FROM Post " \
+                                    "WHERE path LIKE %s ORDER BY path ASC LIMIT %s"
+                            sql_data = (parent_path, limit)
+                            cursor.execute(query, sql_data)
+                            children = cursor.fetchall()
+                            for child in children:
+                                if posts < limit:
+                                    data.append(child)
+                                    posts += 1
+            else:
+                # tree -> desc -> no limit
+                for p in roots:
+                    data.append(p)
+                    parent_path = p[14] + '.%'
+                    query = "SELECT id, forum, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
+                            "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points FROM Post " \
+                            "WHERE path LIKE %s ORDER BY path ASC"
+                    sql_data = (parent_path,)
+                    cursor.execute(query, sql_data)
+                    data2 = cursor.fetchall()
+                    for p1 in data2:
+                        data.append(p1)
 
     else:
+        # parent_tree
         query = "SELECT id, forum, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
-                "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points FROM Post " \
-                "WHERE date>=%s AND thread=%s ORDER BY d "
+                "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points, path FROM Post " \
+                "WHERE date>=%s AND thread=%s AND parent IS NULL ORDER BY d "
         query += order
         query += " LIMIT %s" if limit is not None else ""
         sql_data = (since, thread, limit) if limit is not None else (since, thread)
@@ -298,10 +344,11 @@ def thread_list_posts():
         data = []
         for p in data1:
             data.append(p)
+            parent_path = p[14] + '.%'
             query = "SELECT id, forum, user, parent, message, DATE_FORMAT(date,'%%Y-%%m-%%d %%T') d," \
                     "isApproved, isHighlighted, isEdited, isSpam, isDeleted, likes, dislikes, points FROM Post " \
-                    "WHERE parent=%s ORDER BY path ASC"
-            sql_data = (p[0],)
+                    "WHERE path LIKE %s ORDER BY path ASC"
+            sql_data = (parent_path,)
             cursor.execute(query, sql_data)
             data2 = cursor.fetchall()
             for p1 in data2:

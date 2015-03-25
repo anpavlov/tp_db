@@ -37,5 +37,29 @@ def clear():
     cursor.execute("SET foreign_key_checks = 1")
     return jsonify(code=0, response="OK")
 
+
+@app.route('/db/api/status/', methods=['GET'])
+def status():
+    conn = mysql.get_db()
+    cursor = conn.cursor()
+
+    cursor.execute("SELECT COUNT(*) FROM Post")
+    posts = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM Thread")
+    threads = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM Forum")
+    forums = cursor.fetchone()[0]
+    cursor.execute("SELECT COUNT(*) FROM User")
+    users = cursor.fetchone()[0]
+
+    resp = {
+        "post": posts,
+        "thread": threads,
+        "forum": forums,
+        "user": users
+    }
+
+    return jsonify(code=0, response=resp)
+
 if __name__ == '__main__':
     app.run(debug=True)

@@ -99,7 +99,9 @@ def post_create():
             return jsonify(code=1, response="No post with such id!")
         cursor.execute("SELECT childrenAmnt, path FROM Post WHERE id=%s", (new_post_parent,))
         data = cursor.fetchone()
-        new_post_path = data[1] + '{0:04d}'.format(int(data[0]) + 1)
+        new_post_path = data[1] + '.' + '{0:011d}'.format(int(data[0]) + 1)
+        cursor.execute("UPDATE Post SET childrenAmnt=childrenAmnt+1 WHERE id=%s", (new_post_parent,))
+        conn.commit()
 
     sql_data = (new_post_forum, new_post_thread, new_post_user, new_post_parent, new_post_path,
                 new_post_message, new_post_date, new_post_is_approved, new_post_is_highlighted,
