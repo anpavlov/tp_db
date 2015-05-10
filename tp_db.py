@@ -50,7 +50,6 @@ rfh.setLevel(logging.INFO)
 rfh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s: %(message)s'))
 
 reqLog.addHandler(rfh)
-raise ValueError
 
 @app.after_request
 def aft(response):
