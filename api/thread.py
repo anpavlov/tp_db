@@ -469,16 +469,16 @@ def thread_remove():
     conn = mysql.get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT isDeleted FROM Thread WHERE id=%s", (thread_id,))
-    data = cursor.fetchone()
+    # cursor.execute("SELECT isDeleted FROM Thread WHERE id=%s", (thread_id,))
+    # data = cursor.fetchone()
 
-    if data is None:
+    if not thread_exists(cursor, thread_id):
         return jsonify(code=1, response="No thread with such id!")
 
-    if data[0] == 0:
-        cursor.execute("UPDATE Thread SET isDeleted=1, posts=0 WHERE id=%s", (thread_id,))
-        cursor.execute("UPDATE Post SET isDeleted=1 WHERE thread=%s", (thread_id,))
-        conn.commit()
+    # if data[0] == 0:
+    cursor.execute("UPDATE Thread SET isDeleted=1, posts=0 WHERE id=%s", (thread_id,))
+    cursor.execute("UPDATE Post SET isDeleted=1 WHERE thread=%s", (thread_id,))
+    conn.commit()
 
     resp = {
         "thread": thread_id
@@ -489,7 +489,6 @@ def thread_remove():
 
 @thread_api.route('/restore/', methods=['POST'])
 def thread_restore():
-    # TODO: (?) restore all posts
     try:
         req_json = request.get_json()
     except BadRequest:
@@ -507,17 +506,17 @@ def thread_restore():
     conn = mysql.get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT isDeleted FROM Thread WHERE id=%s", (thread_id,))
-    data = cursor.fetchone()
+    # cursor.execute("SELECT isDeleted FROM Thread WHERE id=%s", (thread_id,))
+    # data = cursor.fetchone()
 
-    if data is None:
+    if not thread_exists(cursor, thread_id):
         return jsonify(code=1, response="No thread with such id!")
 
-    if data[0] == 1:
-        cursor.execute("UPDATE Thread SET isDeleted=0, posts=(SELECT COUNT(*) FROM Post WHERE thread=%s) WHERE id=%s",
-                       (thread_id, thread_id))
-        cursor.execute("UPDATE Post SET isDeleted=0 WHERE thread=%s", (thread_id,))
-        conn.commit()
+    # if data[0] == 1:
+    cursor.execute("UPDATE Thread SET isDeleted=0, posts=(SELECT COUNT(*) FROM Post WHERE thread=%s) WHERE id=%s",
+                   (thread_id, thread_id))
+    cursor.execute("UPDATE Post SET isDeleted=0 WHERE thread=%s", (thread_id,))
+    conn.commit()
 
     resp = {
         "thread": thread_id

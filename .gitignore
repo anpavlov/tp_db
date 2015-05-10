@@ -2,5 +2,8 @@
 tp_db_venv
 *.pyc
 DUMP
+logs
 alog.txt
 req.txt
+*~
+*.log

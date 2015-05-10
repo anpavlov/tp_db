@@ -1,3 +1,4 @@
+# import logging
 from ext import mysql, get_followers, user_exists, get_subs
 from flask import request, jsonify, Blueprint
 from werkzeug.exceptions import BadRequest
@@ -5,24 +6,31 @@ from datetime import datetime
 
 user_api = Blueprint('user_api', __name__)
 
+# usersLog = logging.getLogger('usersLog')
+# emailLog = logging.getLogger('emailLog')
+
 
 @user_api.route('/create/', methods=['POST'])
 def user_create():
     try:
         req_json = request.get_json()
     except BadRequest:
+        # usersLog.error('Cant parse json')
         return jsonify(code=2, response="Cant parse json")
 
     if not ('username' in req_json and 'about' in req_json and 'name' in req_json and 'email' in req_json):
+        # usersLog.error('Wrong parameters')
         return jsonify(code=3, response="Wrong parameters")
 
     new_user_username = req_json['username']
     new_user_about = req_json['about']
     new_user_name = req_json['name']
     new_user_email = req_json['email']
+    # emailLog.info('%s', new_user_email)
 
     if 'isAnonymous' in req_json:
         if req_json['isAnonymous'] is not False and req_json['isAnonymous'] is not True:
+            # usersLog.error('Wrong parameters')
             return jsonify(code=3, response="Wrong parameters")
         new_user_is_anon = req_json['isAnonymous']
     else:
@@ -32,6 +40,7 @@ def user_create():
     cursor = conn.cursor()
 
     if user_exists(cursor, new_user_email):
+        # usersLog.error('User with such email already exists')
         return jsonify(code=5, response="User with such email already exists!")
 
     sql_data = (new_user_about, new_user_email, new_user_is_anon, new_user_name, new_user_username)

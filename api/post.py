@@ -307,16 +307,16 @@ def post_remove():
     conn = mysql.get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT isDeleted, thread FROM Post WHERE id=%s", (post_id,))
+    cursor.execute("SELECT thread FROM Post WHERE id=%s", (post_id,))
     data = cursor.fetchone()
 
     if data is None:
         return jsonify(code=1, response="No post with such id!")
 
-    if data[0] == 0:
-        cursor.execute("UPDATE Post SET isDeleted=1 WHERE id=%s", (post_id,))
-        cursor.execute("UPDATE Thread SET posts=posts-1 WHERE id=%s", (data[1],))
-        conn.commit()
+    # if data[0] == 0:
+    cursor.execute("UPDATE Post SET isDeleted=1 WHERE id=%s", (post_id,))
+    cursor.execute("UPDATE Thread SET posts=posts-1 WHERE id=%s", (data[0],))
+    conn.commit()
 
     resp = {
         "post": post_id
@@ -344,16 +344,16 @@ def post_restore():
     conn = mysql.get_db()
     cursor = conn.cursor()
 
-    cursor.execute("SELECT isDeleted, thread FROM Post WHERE id=%s", (post_id,))
+    cursor.execute("SELECT thread FROM Post WHERE id=%s", (post_id,))
     data = cursor.fetchone()
 
     if data is None:
         return jsonify(code=1, response="No post with such id!")
 
-    if data[0] == 1:
-        cursor.execute("UPDATE Post SET isDeleted=0 WHERE id=%s", (post_id,))
-        cursor.execute("UPDATE Thread SET posts=posts+1 WHERE id=%s", (data[1],))
-        conn.commit()
+    # if data[0] == 1:
+    cursor.execute("UPDATE Post SET isDeleted=0 WHERE id=%s", (post_id,))
+    cursor.execute("UPDATE Thread SET posts=posts+1 WHERE id=%s", (data[0],))
+    conn.commit()
 
     resp = {
         "post": post_id
