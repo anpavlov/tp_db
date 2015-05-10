@@ -1,3 +1,4 @@
+import logging
 from ext import mysql, user_exists, forum_exists, thread_exists,\
     post_exists, user_details, forum_details, thread_details, post_details as post_detail
 from flask import request, jsonify, Blueprint
@@ -5,6 +6,7 @@ from werkzeug.exceptions import BadRequest
 from datetime import datetime
 
 post_api = Blueprint('post_api', __name__)
+postLog = logging.getLogger('postLog')
 
 
 @post_api.route('/create/', methods=['POST'])
@@ -12,10 +14,12 @@ def post_create():
     try:
         req_json = request.get_json()
     except BadRequest:
+        postLog.error("Cant parse json")
         return jsonify(code=2, response="Cant parse json")
 
     if not ('date' in req_json and 'thread' in req_json and 'message' in req_json
             and 'user' in req_json and 'forum' in req_json):
+        postLog.error("Wrong parameters")
         return jsonify(code=3, response="Wrong parameters")
 
     new_post_forum = req_json['forum']
@@ -26,6 +30,7 @@ def post_create():
 
     if 'isApproved' in req_json:
         if req_json['isApproved'] is not False and req_json['isApproved'] is not True:
+            postLog.error("Wrong parameters")
             return jsonify(code=3, response="Wrong parameters")
         new_post_is_approved = req_json['isApproved']
     else:
@@ -33,6 +38,7 @@ def post_create():
 
     if 'isHighlighted' in req_json:
         if req_json['isHighlighted'] is not False and req_json['isHighlighted'] is not True:
+            postLog.error("Wrong parameters")
             return jsonify(code=3, response="Wrong parameters")
         new_post_is_highlighted = req_json['isHighlighted']
     else:
@@ -40,6 +46,7 @@ def post_create():
 
     if 'isEdited' in req_json:
         if req_json['isEdited'] is not False and req_json['isEdited'] is not True:
+            postLog.error("Wrong parameters")
             return jsonify(code=3, response="Wrong parameters")
         new_post_is_edited = req_json['isEdited']
     else:
@@ -47,6 +54,7 @@ def post_create():
 
     if 'isSpam' in req_json:
         if req_json['isSpam'] is not False and req_json['isSpam'] is not True:
+            postLog.error("Wrong parameters")
             return jsonify(code=3, response="Wrong parameters")
         new_post_is_spam = req_json['isSpam']
     else:
@@ -54,6 +62,7 @@ def post_create():
 
     if 'isDeleted' in req_json:
         if req_json['isDeleted'] is not False and req_json['isDeleted'] is not True:
+            postLog.error("Wrong parameters")
             return jsonify(code=3, response="Wrong parameters")
         new_post_is_deleted = req_json['isDeleted']
     else:
@@ -67,23 +76,28 @@ def post_create():
     try:
         new_post_thread = int(new_post_thread)
     except ValueError:
+        postLog.error("Wrong parameters")
         return jsonify(code=3, response="Wrong parameters")
 
     conn = mysql.get_db()
     cursor = conn.cursor()
 
     if not user_exists(cursor, new_post_user):
+        postLog.error("No user with such email")
         return jsonify(code=1, response="No user with such email!")
 
     if not forum_exists(cursor, new_post_forum):
+        postLog.error("No forum with such short name!")
         return jsonify(code=1, response="No forum with such short name!")
 
     if not thread_exists(cursor, new_post_thread):
+        postLog.error("No thread with such id")
         return jsonify(code=1, response="No thread with such id!")
 
     cursor.execute("SELECT 1 FROM Thread WHERE id=%s AND forum=%s", (new_post_thread, new_post_forum))
     data = cursor.fetchone()
     if data is None:
+        postLog.error("No such thread in this forum")
         return jsonify(code=3, response="No such thread in this forum")
 
     if new_post_parent is None:
@@ -94,8 +108,10 @@ def post_create():
         try:
             new_post_parent = int(new_post_parent)
         except ValueError:
+            postLog.error("Wrong parameters")
             return jsonify(code=3, response="Wrong parameters")
         if not post_exists(cursor, new_post_parent):
+            postLog.error("No post with such id")
             return jsonify(code=1, response="No post with such id!")
         cursor.execute("SELECT childrenAmnt, path FROM Post WHERE id=%s", (new_post_parent,))
         data = cursor.fetchone()

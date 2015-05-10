@@ -23,7 +23,7 @@ app.register_blueprint(forum_api, url_prefix='/db/api/forum')
 app.register_blueprint(post_api, url_prefix='/db/api/post')
 app.register_blueprint(thread_api, url_prefix='/db/api/thread')
 
-# logging.basicConfig(filename='logs/tp_db_app.log', level=logging.INFO)
+logging.basicConfig(filename='logs/tp_db_app.log', level=logging.INFO)
 #
 # usersLog = logging.getLogger('usersLog')
 # fh = logging.FileHandler('logs/users.log')
@@ -37,24 +37,31 @@ app.register_blueprint(thread_api, url_prefix='/db/api/thread')
 # fh2.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s: %(message)s'))
 # emailLog.addHandler(fh2)
 #
-# reqLog = logging.getLogger('reqLog')
-# rfh = RotatingFileHandler('logs/request.log', maxBytes=50000000, backupCount=5)
-# rfh.setLevel(logging.INFO)
-# rfh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s: %(message)s'))
-#
-# reqLog.addHandler(rfh)
-#
-#
-# @app.after_request
-# def aft(response):
-#     reqLog.info('Returning %s', response.data)
-#     return response
-#
-#
-# @app.before_request
-# def pre():
-#     reqLog.info('Request to %s with', request.url)
-#     reqLog.info('%s', request.data)
+
+postLog = logging.getLogger('postLog')
+fh2 = logging.FileHandler('logs/emails.log')
+fh2.setLevel(logging.INFO)
+fh2.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s: %(message)s'))
+postLog.addHandler(fh2)
+
+reqLog = logging.getLogger('reqLog')
+rfh = RotatingFileHandler('logs/request.log', maxBytes=50000000, backupCount=5)
+rfh.setLevel(logging.INFO)
+rfh.setFormatter(logging.Formatter('%(asctime)s - %(levelname)s: %(message)s'))
+
+reqLog.addHandler(rfh)
+raise ValueError
+
+@app.after_request
+def aft(response):
+    reqLog.info('Returning %s', response.data)
+    return response
+
+
+@app.before_request
+def pre():
+    reqLog.info('Request to %s with', request.url)
+    reqLog.info('%s', request.data)
 
 
 @app.route('/db/api/clear/', methods=['POST'])
