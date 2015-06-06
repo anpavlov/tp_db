@@ -4,6 +4,5 @@ tp_db_venv
 DUMP
 logs
 alog.txt
-req.txt
 *~
 *.log
