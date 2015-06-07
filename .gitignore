@@ -6,3 +6,4 @@ logs
 alog.txt
 *~
 *.log
+sqlite_db.py
